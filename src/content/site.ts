@@ -23,6 +23,11 @@ export const nav = [
 
 /** Copy for the three beats of the cinematic hero. */
 export const hero = {
+  /** Small labels pinned to the top corners of the hero on wide screens. */
+  corners: {
+    left: 'Websites / AI agents / Product ads',
+    right: 'One studio for the site, the systems behind it and the ads that bring people in.',
+  },
   establish: {
     eyebrow: 'Xalvoric / Digital studio',
     title: 'We build what moves your business.',

@@ -79,3 +79,72 @@ export const beats: { id: 'establish' | 'detail' | 'resolve'; window: Span; focu
   { id: 'detail', window: [0.4, 0.47, 0.6, 0.67], focusAt: 0.53 },
   { id: 'resolve', window: [0.77, 0.85, 2, 2], focusAt: 1 },
 ]
+
+// --- Effects --------------------------------------------------------------
+
+/**
+ * Fog + glitch transitions. Each one peaks at `at` and lasts `span` on either
+ * side; keep them centred on the crossfades between layers above.
+ */
+export const transitions: { at: number; span: number }[] = [
+  { at: 0.36, span: 0.07 },
+  { at: 0.68, span: 0.07 },
+]
+
+/** Pointer tilt (desktop, fine pointers only). Set to 0 to turn off. */
+export const TILT = { shiftX: 0.012, shiftY: 0.008, extraZoom: 0.03, copyPx: 6, ease: 0.08 }
+
+/**
+ * Outline traced over the monolith in beat 1 when the page loads, in image
+ * coordinates (0–1) of beat1-establish. Regenerate these if that image changes.
+ */
+export const outline = {
+  layer: 0,
+  /** Milliseconds for the lines to draw on, then how long they hold before settling. */
+  drawMs: 1500,
+  holdMs: 700,
+  /** Lines fade out between these progress values once scrolling starts. */
+  fadeOut: [0.02, 0.12] as [number, number],
+  paths: [
+    // silhouette: base left → shoulder → apex → shoulder → base right
+    [
+      [0.376, 0.827],
+      [0.3895, 0.218],
+      [0.4255, 0.135],
+      [0.461, 0.213],
+      [0.474, 0.827],
+    ],
+    // front edge
+    [
+      [0.4255, 0.135],
+      [0.419, 0.218],
+      [0.42, 0.827],
+    ],
+    // pyramid base
+    [
+      [0.3895, 0.218],
+      [0.419, 0.218],
+      [0.461, 0.213],
+    ],
+  ],
+  /** Base plate ellipse: centre and radii. */
+  plate: { cx: 0.4215, cy: 0.833, rx: 0.1175, ry: 0.016 },
+  /** Small mono labels pinned to points on the image; `side` is where the label sits. */
+  marks: [
+    { at: [0.4255, 0.135], text: 'XAL / 01', side: 'right' },
+    { at: [0.384, 0.52], text: 'FACET / A', side: 'left' },
+  ] as { at: [number, number]; text: string; side: 'left' | 'right' }[],
+}
+
+/**
+ * Callouts that tie each beat-2 service link to a point on the monolith edge,
+ * in image coordinates of beat2-detail. One per service, in list order.
+ */
+export const callouts = {
+  layer: 1,
+  anchors: [
+    [0.398, 0.3],
+    [0.392, 0.5],
+    [0.43, 0.68],
+  ],
+}

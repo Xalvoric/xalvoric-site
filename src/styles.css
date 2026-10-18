@@ -447,6 +447,112 @@ main:focus {
   opacity: 1;
 }
 
+/* Line work drawn over the canvas: hairlines, mono labels. */
+.scene-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.scene-lines polyline,
+.scene-lines ellipse,
+.scene-lines line {
+  fill: none;
+  stroke: rgba(243, 243, 241, 0.75);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.scene-lines .lines-mark line {
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+  stroke: rgba(243, 243, 241, 0.6);
+}
+
+.scene-lines circle {
+  fill: var(--ink);
+}
+
+.scene-lines .lines-ring {
+  fill: none;
+  stroke: rgba(243, 243, 241, 0.5);
+  stroke-width: 1;
+}
+
+.scene-lines text {
+  fill: rgba(243, 243, 241, 0.85);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.lines-callouts polyline {
+  stroke: rgba(243, 243, 241, 0.55);
+}
+
+/* Phones: copy sits in the lower half, so fade the line work out before it. */
+@media (max-width: 859px) {
+  .scene-lines {
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 52%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 52%);
+  }
+
+  .scene-lines .lines-mark + .lines-mark {
+    display: none;
+  }
+}
+
+/* Top-corner labels, wide screens only. */
+.scene-corner {
+  position: absolute;
+  top: calc(var(--header-h) + 28px);
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.55;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c9c9c5;
+  text-shadow: 0 0 14px rgba(5, 5, 5, 0.7);
+  pointer-events: none;
+}
+
+.scene-corner--left {
+  left: var(--gutter);
+}
+
+.scene-corner--right {
+  right: var(--gutter);
+  max-width: 34ch;
+  text-align: right;
+  text-wrap: balance;
+}
+
+@media (max-width: 859px), (max-height: 680px) {
+  .scene-corner {
+    display: none;
+  }
+}
+
+/* With a mouse the canvas frames 3% tighter (room for tilt); match the poster. */
+@media (pointer: fine) {
+  .scene-poster {
+    transform: scale(1.03);
+  }
+}
+
+/* Phones: frame the poster exactly like the canvas's first frame, so the hand-off doesn't jump. */
+@media (max-aspect-ratio: 16/9) {
+  .scene-poster {
+    object-position: max(calc(100vw - 177.78svh), min(0px, calc(50vw - 75.56svh))) 50%;
+  }
+}
+
 /* Restrained scrims keep copy readable over every frame of the camera move. */
 .scene-scrim {
   position: absolute;

@@ -43,6 +43,11 @@ npm run media      # re-encode assets-src/*.png into public/media/*.webp
 | Scroll length and timing | `src/scene/config.ts` → `SCROLL_LENGTH_VH`, each layer's `window` and `keys`, `beats` |
 | Desktop vs phone framing | `keys` (landscape) and `portraitKeys` (phones) in `src/scene/config.ts` |
 | Copy position over the scene | `.scene-beat--*` rules in `src/styles.css` |
+| Top-corner labels in the hero | `hero.corners` in `src/content/site.ts` |
+| Fog/glitch transitions (timing) | `transitions` in `src/scene/config.ts`; look in `src/scene/effects.ts` |
+| Line build-in over the monolith | `outline` in `src/scene/config.ts` (points are image coordinates of beat 1) |
+| Callouts from monolith to service links | `callouts` in `src/scene/config.ts` (points are image coordinates of beat 2) |
+| Cursor tilt strength (or off) | `TILT` in `src/scene/config.ts` |
 | Page title, description, social image | `index.html` |
 
 ### How scroll timing works
@@ -66,6 +71,9 @@ npm run media      # re-encode assets-src/*.png into public/media/*.webp
 - Three stills are drawn to a `<canvas>` with a slow push-in, a crossfade into a detail shot, and a pull-back reveal. Video scrubbing was not used because no video was generated (see `ASSETS.md`).
 - A poster `<img>` paints immediately; the canvas fades in once the first still is decoded. The first still loads first, then the other two.
 - One image width is chosen per visit (1280 or 2048 px). At most three bitmaps are kept in memory. If a still has not loaded, the nearest earlier still is held on its last frame instead of going blank. If a 2048 file fails, the 1280 file is tried.
+- Between beats, a fog-and-glitch transition (screened ghost copies, horizontal slice offsets, a grey fog veil) peaks at each crossfade. The slices are seeded from progress, so scrolling back replays the same frames. The offscreen buffer it needs is allocated when the browser is idle.
+- On load, hairlines trace the monolith's outline (1.5 s), settle to a faint layer, and fade out as scrolling starts. In beat 2, leader lines tie each service link to a point on the monolith edge (desktop layout only). Both are an SVG layer driven by the same camera maths as the canvas, so they stay pinned through the camera move.
+- With a mouse, the frame shifts slightly toward the pointer and the copy drifts a few pixels the other way. Touch devices get no tilt.
 - On resize the visitor stays at the same point in the sequence, not the same pixel offset.
 - Keyboard focus moving into hero links scrolls the scene to that beat.
 - `prefers-reduced-motion: reduce` (or `?motion=off`) replaces the sequence with the same three frames and copy in normal document flow.
@@ -92,4 +100,4 @@ Any static host works: upload the contents of `dist/` after `npm run build`.
 
 - No logo, photos, real facts or contact address were supplied, so the copy describes the services without claims, prices, client names or numbers.
 - Visual subject (a black glass monolith) and palette (black, white, greys) were chosen to fit the "dark black and white" brief.
-- The reference site (igloo.inc) was studied only for its general approach: a monochrome hero object, scroll-driven camera and small mono interface labels. No code, text, media or layout was copied.
+- The reference site (igloo.inc) was studied from a screen recording you supplied: its build-in, fog/glitch transitions, cursor response, pinned callouts and corner labels. Those ideas were reinterpreted for still images; no code, text, media or layout was copied.

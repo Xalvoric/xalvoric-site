@@ -443,8 +443,21 @@ main:focus {
   transition: opacity 0.6s var(--ease-out);
 }
 
-.scene-stage[data-media='ready'] .scene-canvas {
+.scene-stage[data-media='ready'] .scene-canvas--stills {
   opacity: 1;
+}
+
+/* WebGL takes over once its first frame is drawn; it has its own grain. */
+.scene-canvas--gl {
+  transition-duration: 0.9s;
+}
+
+.scene-stage[data-renderer='webgl'] .scene-canvas--gl {
+  opacity: 1;
+}
+
+.scene-stage[data-renderer='webgl'] .grain {
+  display: none;
 }
 
 /* Line work drawn over the canvas: hairlines, mono labels. */

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { beats, callouts, layers, outline, SCROLL_LENGTH_VH, TILT, type Cam } from '../scene/config'
-import { camAt, clamp, driftAt, frameRect, opacityAt } from '../scene/timeline'
-import { drawTransition, transitionAt } from '../scene/effects'
+import { beats, callouts, layers, outline, SCROLL_LENGTH_VH, TILT } from '../scene/config'
+import { clamp, driftAt, opacityAt } from '../scene/timeline'
+import { StillsRenderer } from '../scene/stillsRenderer'
+import type { AnchorName, FrameState, HeroRenderer } from '../scene/renderer'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { hero } from '../content/site'
 import { HeroCopy } from './HeroCopy'
@@ -16,9 +17,6 @@ if (typeof window !== 'undefined') {
 }
 
 const BEAT_LABELS = ['Studio', 'Services', 'Begin']
-/** Aspect of the source stills; only the ratio matters for framing maths. */
-const IW = 1600
-const IH = 900
 /** Copy drifts this many px as a beat enters or leaves. */
 const DRIFT_PX = 28
 /** Callouts need the desktop two-column layout. */
@@ -33,28 +31,23 @@ export function ScrollScene() {
   return reduced ? <StaticScene /> : <MotionScene />
 }
 
-/** Pick one image width for the session; bounded so phones never decode more than 3 × 2048 px stills. */
-function pickWidth(): 1280 | 2048 {
+/** WebGL is worth trying here (the renderer still checks it can create a context). */
+function webglWanted() {
+  const q = new URLSearchParams(window.location.search).get('gl')
+  if (q === 'off') return false
+  if (q === 'on') return true
   const nav = navigator as Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number }
-  if (nav.connection?.saveData || (nav.deviceMemory ?? 8) <= 2) return 1280
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  // Source width needed to cover the viewport at zoom 1 (images are 16:9).
-  const need = Math.max(window.innerWidth, (window.innerHeight * 16) / 9) * dpr
-  return need > 1500 ? 2048 : 1280
-}
-
-function loadImage(url: string) {
-  const img = new Image()
-  img.decoding = 'async'
-  img.src = url
-  // decode() resolves once the bitmap is ready to paint, and rejects on 404 / bad data.
-  return img.decode().then(() => img)
+  if (nav.connection?.saveData) return false
+  if ((nav.deviceMemory ?? 8) < 4) return false
+  if ((navigator.hardwareConcurrency || 8) < 4) return false
+  return true
 }
 
 function MotionScene() {
   const sectionRef = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const stillsRef = useRef<HTMLCanvasElement>(null)
+  const glRef = useRef<HTMLCanvasElement>(null)
   const beatRefs = useRef<(HTMLDivElement | null)[]>([])
   const barRef = useRef<HTMLSpanElement>(null)
   const counterRef = useRef<HTMLSpanElement>(null)
@@ -63,41 +56,55 @@ function MotionScene() {
   useEffect(() => {
     const section = sectionRef.current!
     const stage = stageRef.current!
-    const canvas = canvasRef.current!
-    const ctx = canvas.getContext('2d', { alpha: false })
-    if (!ctx) {
-      stage.dataset.media = 'failed'
-      return
-    }
-
+    const stillsCanvas = stillsRef.current!
+    const glCanvas = glRef.current!
     const svg = svgRef.current!
-    const images: (HTMLImageElement | null)[] = layers.map(() => null)
+
     let progress = 0
     let dirty = true
     let disposed = false
     let activeBeat = -1
     const drift: number[] = beats.map(() => 0)
 
-    // Offscreen frame, only used while a transition is running.
-    let buffer: HTMLCanvasElement | null = null
-    let bctx: CanvasRenderingContext2D | null = null
-
     // Overlay elements (queried once).
     const outlineGroup = svg.querySelector<SVGGElement>('.lines-outline')!
     const outlinePaths = [...svg.querySelectorAll<SVGPolylineElement>('.lines-outline polyline')]
     const plate = svg.querySelector<SVGEllipseElement>('.lines-outline ellipse')!
+    const marksGroup = svg.querySelector<SVGGElement>('.lines-marks')!
     const marks = [...svg.querySelectorAll<SVGGElement>('.lines-mark')]
     const calloutGroup = svg.querySelector<SVGGElement>('.lines-callouts')!
     const calloutEls = [...svg.querySelectorAll<SVGGElement>('.lines-callout')]
-    const t0 = performance.now()
+    let t0 = performance.now()
     const settleEnd = outline.drawMs + outline.holdMs + 600
 
     // Pointer tilt: desktop with a precise pointer only.
     const fine = window.matchMedia('(pointer: fine)').matches && TILT.shiftX + TILT.shiftY > 0
+    const mobile = window.matchMedia('(pointer: coarse)').matches || Math.min(window.innerWidth, window.innerHeight) < 600
     let tiltX = 0
     let tiltY = 0
     let aimX = 0
     let aimY = 0
+
+    // --- renderer: stills first, WebGL takes over when ready -----------------
+    let renderer: HeroRenderer | null = null
+    const makeStills = () => {
+      try {
+        return new StillsRenderer(stillsCanvas, {
+          tilt: fine,
+          onStatus: (st) => {
+            if (st === 'failed' && renderer?.kind === 'webgl') return
+            stage.dataset.media = st
+          },
+          onChange: () => {
+            dirty = true
+          },
+        })
+      } catch {
+        stage.dataset.media = 'failed'
+        return null
+      }
+    }
+    renderer = makeStills()
 
     // --- sizing -----------------------------------------------------------
     let cssW = 1
@@ -114,19 +121,9 @@ function MotionScene() {
     }
     const resize = () => {
       const rect = stage.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      const w = Math.max(1, Math.round(rect.width * dpr))
-      const h = Math.max(1, Math.round(rect.height * dpr))
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w
-        canvas.height = h
-        if (buffer) {
-          buffer.width = w
-          buffer.height = h
-        }
-      }
       cssW = rect.width
       cssH = rect.height
+      renderer?.resize(cssW, cssH)
       svg.setAttribute('viewBox', `0 0 ${cssW.toFixed(1)} ${cssH.toFixed(1)}`)
       measureItems()
       dirty = true
@@ -135,153 +132,79 @@ function MotionScene() {
     ro.observe(stage)
     resize()
 
-    // --- loading: first beat first, then the rest -------------------------
-    const width = pickWidth()
-    const urls = layers.map((l) => `${l.src}-${width}.webp`)
-    let failures = 0
-    const load = (i: number) =>
-      loadImage(urls[i])
-        // If the large file is missing or corrupt, try the small one before giving up.
-        .catch(() => (width === 2048 ? loadImage(`${layers[i].src}-1280.webp`) : Promise.reject()))
-        .then(
-        (img) => {
-          if (disposed) return
-          images[i] = img
-          stage.dataset.media = 'ready'
-          dirty = true
-        },
-        () => {
-          failures++
-          if (failures === layers.length) stage.dataset.media = 'failed'
-        },
-      )
-    load(0).finally(() => {
-      if (!disposed) for (let i = 1; i < layers.length; i++) load(i)
-    })
-
-    // Allocate and warm the transition buffer while idle, so the first glitch frame doesn't stall.
-    const ensureBuffer = () => {
-      if (buffer || disposed) return
-      buffer = document.createElement('canvas')
-      buffer.width = canvas.width
-      buffer.height = canvas.height
-      bctx = buffer.getContext('2d', { alpha: false })
-      bctx?.fillRect(0, 0, 1, 1)
-      ctx.drawImage(buffer, 0, 0, 1, 1, -2, -2, 1, 1)
-    }
-    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1200))
-    const idleId = idle(ensureBuffer)
-
     // --- drawing ------------------------------------------------------------
-    /** Camera for a layer at the current progress, including pointer tilt. */
-    const camFor = (i: number, portrait: boolean): Cam => {
-      const layer = layers[i]
-      const c = camAt((portrait && layer.portraitKeys) || layer.keys, progress)
-      if (!fine) return c
-      return { zoom: c.zoom + TILT.extraZoom, fx: c.fx + tiltX * TILT.shiftX, fy: c.fy + tiltY * TILT.shiftY }
-    }
-
-    const paintLayers = (g: CanvasRenderingContext2D, w: number, h: number) => {
-      const portrait = w < h
-      g.globalCompositeOperation = 'source-over'
-      g.globalAlpha = 1
-      g.fillStyle = '#050505'
-      g.fillRect(0, 0, w, h)
-      let base = true
-      for (let i = 0; i < layers.length; i++) {
-        const op = opacityAt(layers[i].window, progress)
-        if (op <= 0.002) continue
-        // If this still isn't decoded yet, hold the nearest earlier one that is
-        // (camAt clamps, so it stays on its last frame instead of going blank).
-        let src = i
-        while (src >= 0 && !images[src]) src--
-        if (src < 0) continue
-        const img = images[src]!
-        const r = frameRect(img.naturalWidth, img.naturalHeight, w, h, camFor(src, portrait))
-        // The first painted layer is opaque so crossfades never dip to black.
-        g.globalAlpha = base ? 1 : op
-        g.drawImage(img, r.x, r.y, r.dw, r.dh)
-        base = false
-      }
-      g.globalAlpha = 1
-    }
-
-    /** Map an image point (0–1) of a layer to stage CSS pixels. */
-    const toStage = (layer: number, u: number, v: number) => {
-      const r = frameRect(IW, IH, cssW, cssH, camFor(layer, cssW < cssH))
-      return [r.x + u * r.dw, r.y + v * r.dh] as const
-    }
-    const pts = (layer: number, list: number[][]) =>
-      list.map(([u, v]) => toStage(layer, u, v).map((n) => n.toFixed(1)).join(',')).join(' ')
-
-    /** Returns true while a time-based animation still needs frames. */
-    const drawLines = (now: number) => {
-      // Outline build-in over beat 1.
+    const frameState = (now: number): FrameState => {
       const t = now - t0
-      const build = easeOut(clamp(t / outline.drawMs, 0, 1))
-      const settle = 1 - 0.55 * ramp(t, outline.drawMs + outline.holdMs, settleEnd)
-      const scrollFade = 1 - ramp(progress, outline.fadeOut[0], outline.fadeOut[1])
-      const oo = settle * scrollFade
-      outlineGroup.style.opacity = oo.toFixed(3)
-      if (oo > 0.001) {
-        outline.paths.forEach((path, i) => {
-          outlinePaths[i].setAttribute('points', pts(outline.layer, path))
-          outlinePaths[i].style.strokeDashoffset = (1 - build).toFixed(3)
+      return {
+        p: progress,
+        now,
+        tiltX,
+        tiltY,
+        build: easeOut(clamp(t / outline.drawMs, 0, 1)),
+        lineAlpha:
+          (1 - 0.55 * ramp(t, outline.drawMs + outline.holdMs, settleEnd)) *
+          (1 - ramp(progress, outline.fadeOut[0], outline.fadeOut[1])),
+      }
+    }
+
+    const drawOverlay = (s: FrameState) => {
+      const r = renderer
+      if (!r) return
+      // Outline (stills only; WebGL draws its own edge lines).
+      const shape = s.lineAlpha > 0.001 ? r.outline(s) : null
+      outlineGroup.style.opacity = shape ? s.lineAlpha.toFixed(3) : '0'
+      if (shape) {
+        shape.paths.forEach((pts, i) => {
+          outlinePaths[i]?.setAttribute('points', pts)
+          if (outlinePaths[i]) outlinePaths[i].style.strokeDashoffset = (1 - s.build).toFixed(3)
         })
-        const [cx, cy] = toStage(outline.layer, outline.plate.cx, outline.plate.cy)
-        const [ex] = toStage(outline.layer, outline.plate.cx + outline.plate.rx, outline.plate.cy)
-        const [, ey] = toStage(outline.layer, outline.plate.cx, outline.plate.cy + outline.plate.ry)
-        plate.setAttribute('cx', cx.toFixed(1))
-        plate.setAttribute('cy', cy.toFixed(1))
-        plate.setAttribute('rx', Math.max(0, ex - cx).toFixed(1))
-        plate.setAttribute('ry', Math.max(0, ey - cy).toFixed(1))
-        plate.style.strokeDashoffset = (1 - build).toFixed(3)
-        outline.marks.forEach((m, i) => {
-          const [x, y] = toStage(outline.layer, m.at[0], m.at[1])
-          marks[i].setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`)
-          marks[i].style.opacity = ramp(build, 0.6, 1).toFixed(3)
+        plate.setAttribute('cx', shape.plate.cx.toFixed(1))
+        plate.setAttribute('cy', shape.plate.cy.toFixed(1))
+        plate.setAttribute('rx', shape.plate.rx.toFixed(1))
+        plate.setAttribute('ry', shape.plate.ry.toFixed(1))
+        plate.style.strokeDashoffset = (1 - s.build).toFixed(3)
+      }
+
+      // Labels pinned to the monolith.
+      marksGroup.style.opacity = s.lineAlpha.toFixed(3)
+      if (s.lineAlpha > 0.001) {
+        marks.forEach((m, i) => {
+          const a = r.anchor(i === 0 ? 'mark0' : 'mark1', s)
+          if (!a) return
+          m.setAttribute('transform', `translate(${a[0].toFixed(1)} ${a[1].toFixed(1)})`)
+          m.style.opacity = ramp(s.build, 0.6, 1).toFixed(3)
         })
       }
 
       // Callouts: service links in beat 2 tied to points on the monolith edge.
-      const co = cssW >= CALLOUT_MIN_WIDTH ? opacityAt(beats[1].window, progress) : 0
+      const co = cssW >= CALLOUT_MIN_WIDTH ? opacityAt(beats[1].window, s.p) : 0
       calloutGroup.style.opacity = co.toFixed(3)
       if (co > 0.001) {
-        callouts.anchors.forEach(([u, v], i) => {
-          const el = calloutEls[i]
+        calloutEls.forEach((el, i) => {
           const item = items[i]
-          if (!el || !item) return
-          const [ax, ay] = toStage(callouts.layer, u, v)
+          const a = r.anchor(`callout${i}` as AnchorName, s)
+          if (!item || !a) return
+          const [ax, ay] = a
           const iy = item.y + drift[1]
-          const ix = item.x - 10 - tiltX * TILT.copyPx
-          el.querySelector('polyline')!.setAttribute(
+          const ix = item.x - 10 - s.tiltX * TILT.copyPx
+          const line = el.querySelector('polyline')!
+          line.setAttribute(
             'points',
             `${ax.toFixed(1)},${ay.toFixed(1)} ${(ix - 34).toFixed(1)},${iy.toFixed(1)} ${ix.toFixed(1)},${iy.toFixed(1)}`,
           )
-          el.querySelector('polyline')!.style.strokeDashoffset = (1 - co).toFixed(3)
+          line.style.strokeDashoffset = (1 - co).toFixed(3)
           el.querySelectorAll('circle').forEach((c) => {
             c.setAttribute('cx', ax.toFixed(1))
             c.setAttribute('cy', ay.toFixed(1))
           })
         })
       }
-      return t < settleEnd
     }
 
+    /** Returns true if the renderer or a timed animation wants more frames. */
     const draw = (now: number) => {
-      const w = canvas.width
-      const h = canvas.height
-      const fx = transitionAt(progress)
-      if (fx.amount > 0.01) ensureBuffer()
-      const buf = buffer as HTMLCanvasElement | null
-      if (fx.amount > 0.01 && buf && bctx) {
-        paintLayers(bctx, w, h)
-        drawTransition(ctx, buf, w, h, fx.amount, fx.index)
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.globalAlpha = 1
-      } else {
-        paintLayers(ctx, w, h)
-      }
+      const s = frameState(now)
+      const wants = renderer?.frame(s) ?? false
 
       // Copy blocks follow the same progress value.
       // The counter switches halfway between one beat leaving and the next arriving.
@@ -303,8 +226,21 @@ function MotionScene() {
         activeBeat = top
         counterRef.current.textContent = `0${top + 1} / 0${beats.length}  ${BEAT_LABELS[top]}`
       }
-      return drawLines(now)
+      drawOverlay(s)
+      return wants || now - t0 < settleEnd
     }
+
+    // Only animate continuously while the hero is on screen and the tab is visible.
+    let inView = true
+    const io = new IntersectionObserver(([e]) => {
+      inView = e.isIntersecting
+      dirty = true
+    })
+    io.observe(section)
+
+    // Frame-time guard: if WebGL can't keep up, fall back to the stills.
+    let perfSamples: number[] = []
+    let lastFrame = 0
 
     let animating = true
     const tick = () => {
@@ -318,11 +254,71 @@ function MotionScene() {
         tiltX = nx
         tiltY = ny
       }
-      if (!dirty && !animating) return
+      const live = inView && document.visibilityState === 'visible'
+      if (!dirty && !(animating && live)) return
       dirty = false
-      animating = draw(performance.now())
+      const now = performance.now()
+      if (renderer?.kind === 'webgl' && live && perfSamples.length < 120) {
+        if (lastFrame) perfSamples.push(now - lastFrame)
+        lastFrame = now
+        if (perfSamples.length === 120) {
+          const sorted = perfSamples.slice(20).sort((a, b) => a - b)
+          if (sorted[sorted.length >> 1] > 34) fallbackToStills()
+        }
+      }
+      animating = draw(now)
     }
     gsap.ticker.add(tick)
+
+    const fallbackToStills = () => {
+      if (!renderer || renderer.kind !== 'webgl') return
+      renderer.dispose()
+      renderer = makeStills()
+      renderer?.resize(cssW, cssH)
+      stage.dataset.renderer = 'stills'
+      dirty = true
+    }
+
+    // Load the WebGL scene after the page has loaded, so it never competes with first paint.
+    let glStarted = false
+    const startWebGL = () => {
+      if (glStarted || disposed || !webglWanted()) return
+      glStarted = true
+      import('../scene/three/MonolithRenderer')
+        .then(({ MonolithRenderer }) => {
+          if (disposed) return
+          const gl = new MonolithRenderer(glCanvas, { tilt: fine, mobile })
+          gl.resize(cssW, cssH)
+          t0 = performance.now()
+          gl.frame(frameState(t0))
+          const old = renderer
+          renderer = gl
+          stage.dataset.renderer = 'webgl'
+          stage.dataset.media = 'ready'
+          perfSamples = []
+          lastFrame = 0
+          animating = true
+          dirty = true
+          // Keep the stills underneath until the WebGL canvas has faded in.
+          window.setTimeout(() => {
+            if (renderer === gl) old?.dispose()
+          }, 1000)
+        })
+        .catch(() => {
+          // No WebGL or the chunk failed to load: the stills stay.
+        })
+    }
+    const onLoad = () => {
+      const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300))
+      idle(startWebGL, { timeout: 2000 })
+    }
+    if (document.readyState === 'complete') onLoad()
+    else window.addEventListener('load', onLoad, { once: true })
+    const onContextLost = (e: Event) => {
+      e.preventDefault()
+      fallbackToStills()
+    }
+    glCanvas.addEventListener('webglcontextlost', onContextLost)
 
     const onPointer = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse') return
@@ -393,13 +389,14 @@ function MotionScene() {
       ScrollTrigger.removeEventListener('refresh', onRefreshed)
       st.kill()
       ro.disconnect()
+      io.disconnect()
       section.removeEventListener('focusin', onFocusIn)
       window.removeEventListener('pointermove', onPointer)
+      window.removeEventListener('load', onLoad)
       document.documentElement.removeEventListener('pointerleave', onLeave)
-      ;(window.cancelIdleCallback ?? window.clearTimeout)(idleId)
-      images.fill(null)
-      buffer = null
-      bctx = null
+      glCanvas.removeEventListener('webglcontextlost', onContextLost)
+      renderer?.dispose()
+      renderer = null
     }
   }, [])
 
@@ -410,8 +407,8 @@ function MotionScene() {
       style={{ height: `${SCROLL_LENGTH_VH}svh` }}
       aria-label="Introduction"
     >
-      <div ref={stageRef} className="scene-stage" data-media="loading">
-        {/* Poster paints immediately; the canvas fades in over it once the first still is decoded. */}
+      <div ref={stageRef} className="scene-stage" data-media="loading" data-renderer="stills">
+        {/* Poster paints immediately; the stills canvas fades in over it, then WebGL (if available). */}
         <img
           className="scene-poster"
           src="/media/beat1-establish-1280.webp"
@@ -422,17 +419,20 @@ function MotionScene() {
             e.currentTarget.hidden = true
           }}
         />
-        <canvas ref={canvasRef} className="scene-canvas" role="img" aria-label={layers[0].alt} />
+        <canvas ref={stillsRef} className="scene-canvas scene-canvas--stills" role="img" aria-label={layers[0].alt} />
+        <canvas ref={glRef} className="scene-canvas scene-canvas--gl" aria-hidden="true" />
         <div className="scene-scrim" aria-hidden="true" />
         <div className="grain" aria-hidden="true" />
 
-        {/* Decorative line work: outline build-in (beat 1) and service callouts (beat 2). */}
+        {/* Decorative line work: outline build-in, labels, and service callouts (beat 2). */}
         <svg ref={svgRef} className="scene-lines" aria-hidden="true" focusable="false">
           <g className="lines-outline" style={{ opacity: 0 }}>
             {outline.paths.map((_, i) => (
               <polyline key={i} pathLength={1} />
             ))}
             <ellipse pathLength={1} />
+          </g>
+          <g className="lines-marks" style={{ opacity: 0 }}>
             {outline.marks.map((m) => (
               <g key={m.text} className="lines-mark" style={{ opacity: 0 }}>
                 <circle r={2.5} />

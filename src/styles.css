@@ -654,11 +654,14 @@ main:focus {
   column-gap: 8px;
   padding: 16px 0;
   border-top: 1px solid var(--line-strong);
-  transition: padding-left 0.3s var(--ease-out);
 }
 
-.hero-list a:hover {
-  padding-left: 8px;
+.hero-list a > * {
+  transition: transform 0.3s var(--ease-out);
+}
+
+.hero-list a:hover > * {
+  transform: translateX(8px);
 }
 
 .hero-list-index {

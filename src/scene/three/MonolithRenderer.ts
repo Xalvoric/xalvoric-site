@@ -43,6 +43,10 @@ import * as S from './shaders'
 
 const ramp = (p: number, a: number, b: number) => clamp((p - a) / (b - a), 0, 1)
 
+/** Fog thickens through each transition, so the camera dives through it instead of cutting. */
+const FOG_BASE = 0.045
+const FOG_PEAK = 0.11
+
 /** World-space points the SVG overlay pins labels and callouts to. */
 const ANCHORS: Record<AnchorName, Vector3> = {
   mark0: new Vector3(0, M.apex, 0),
@@ -68,6 +72,7 @@ export class MonolithRenderer implements HeroRenderer {
   private body: MeshPhysicalMaterial
   private mirror: MeshPhysicalMaterial
   private env: Texture
+  private fog: FogExp2
   private cssW = 1
   private cssH = 1
   private opts: MonolithOptions
@@ -112,7 +117,8 @@ export class MonolithRenderer implements HeroRenderer {
     this.env = envRT.texture
     this.scene.environment = this.env
     // Fog matches the sky's horizon tone so the floor melts into it.
-    this.scene.fog = new FogExp2(new Color().setRGB(0.021, 0.021, 0.022, LinearSRGBColorSpace), 0.045)
+    this.fog = new FogExp2(new Color().setRGB(0.021, 0.021, 0.022, LinearSRGBColorSpace), FOG_BASE)
+    this.scene.fog = this.fog
     this.disposables.push(pmrem, envRT, envSky.material as ShaderMaterial, skyMat, sky.geometry)
 
     // --- monolith ----------------------------------------------------------
@@ -290,6 +296,7 @@ export class MonolithRenderer implements HeroRenderer {
     const t = s.now / 1000
     const fx = transitionAt(s.p)
     const exposure = 0.16 + 0.84 * ramp(s.build, 0.35, 1)
+    this.fog.density = FOG_BASE + (FOG_PEAK - FOG_BASE) * fx.amount
 
     // Beat 2: circuits light up and the dust gathers round the monolith.
     const detail = opacityAt([0.3, 0.46, 0.62, 0.76], s.p)

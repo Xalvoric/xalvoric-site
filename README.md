@@ -114,3 +114,9 @@ Any static host works: upload the contents of `dist/` after `npm run build`.
 - Visual subject (a black glass monolith) and palette (black, white, greys) were chosen to fit the "dark black and white" brief.
 - The reference site (igloo.inc) was studied from a screen recording you supplied: its build-in, fog/glitch transitions, cursor response, pinned callouts and corner labels. Those ideas were reinterpreted for this brand; no code, text, media or layout was copied.
 - A later build prompt suggested all text inside WebGL, a percentage loading screen and igloo's three-section portfolio structure. Those were not adopted: the site keeps real HTML text, shows content immediately, and keeps its own sections. Its real-time 3D, DPR cap, staged loading and reduced-motion ideas were adopted.
+
+## About this variant
+
+Variant orbit: the "Three ways we help a business grow." section is a pinned chapter with a dial that orbits through the three services (Web, AI, Ads), with scroll-linked reveals on one GSAP loop. Chosen from a five-agent design tournament (served locally on port 47312 during review).
+
+Built from the base site with `npm install && npm run build`. Typecheck and build pass. Not verified: real-GPU frame rate, real phone touch scrolling, Safari/Firefox.

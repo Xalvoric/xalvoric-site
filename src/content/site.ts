@@ -39,9 +39,9 @@ export const hero = {
     eyebrow: 'What we do',
     title: 'Three disciplines. One standard.',
     items: [
-      { label: 'Website development', note: 'Fast, considered sites that explain what you sell.', href: '#web' },
-      { label: 'AI agency', note: 'Agents and automations wired into real workflows.', href: '#ai' },
-      { label: 'Ad generation', note: 'Product visuals and video ads, made to test.', href: '#ads' },
+      { label: 'Website development', href: '#web' },
+      { label: 'AI agency', href: '#ai' },
+      { label: 'Ad generation', href: '#ads' },
     ],
   },
   resolve: {
@@ -55,6 +55,10 @@ export const hero = {
 export type Service = {
   id: string
   index: string
+  /** Two-to-three letter tag shown on the decorative ring. */
+  short: string
+  /** Three words for the line drawing's callouts. Each names a step listed under `includes`. */
+  tags: [string, string, string]
   name: string
   lede: string
   includes: string[]
@@ -65,6 +69,8 @@ export const services: Service[] = [
   {
     id: 'web',
     index: '01',
+    short: 'WEB',
+    tags: ['Structure', 'Design', 'Build'],
     name: 'Website development',
     lede: 'Marketing sites and web apps that load quickly, read clearly and are easy for your team to keep up to date.',
     includes: [
@@ -78,6 +84,8 @@ export const services: Service[] = [
   {
     id: 'ai',
     index: '02',
+    short: 'AI',
+    tags: ['Map', 'Agents', 'Review'],
     name: 'AI agency',
     lede: 'We design and build AI agents and automations around the work your team already does, from first draft to daily use.',
     includes: [
@@ -91,6 +99,8 @@ export const services: Service[] = [
   {
     id: 'ads',
     index: '03',
+    short: 'ADS',
+    tags: ['Concepts', 'Scenes', 'Variants'],
     name: 'Ad generation',
     lede: 'AI-assisted product imagery and short video ads, art-directed so they look like your brand and not like a template.',
     includes: [
@@ -102,6 +112,14 @@ export const services: Service[] = [
     fit: 'You need more creative to test than a traditional shoot can produce.',
   },
 ]
+
+/** Copy for the "Three ways we help a business grow." chapter. */
+export const chapter = {
+  eyebrow: 'Services',
+  title: 'Three ways we help a business grow.',
+  lede: 'Take one service or combine them. Each is led by the same team, so your site, your tools and your ads speak with one voice.',
+  railLabel: 'Services',
+}
 
 export const process = [
   {

@@ -34,8 +34,44 @@ export const portraitPath: CamKey3[] = [
   { p: 1, pos: [-3.4, 4.8, 25], look: [0, 3, 0], fov: 32, ox: 0, oy: 0.16 },
 ]
 
-const easeInOut = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2
-const mix = (a: number, b: number, t: number) => a + (b - a) * t
+// One continuous curve through the keys (a cardinal spline per channel) instead
+// of an ease-in/ease-out between every pair. Easing per pair brings the camera
+// to a full stop at every key, which reads as "slide, stop, slide". With the
+// spline the camera keeps moving through a beat: it only slows where the
+// keyframes themselves ask for it. The two ends of the path still start and
+// finish at rest. Spline tangents are scaled by TENSION (1 = Catmull-Rom,
+// lower = tighter, less overshoot).
+const TENSION = 0.85
+
+type Channels = number[][]
+
+const channelsOf = (k: CamKey3) => [...k.pos, ...k.look, k.fov, k.ox, k.oy]
+
+const tangentCache = new WeakMap<CamKey3[], { ch: Channels; m: Channels }>()
+
+function prepare(path: CamKey3[]) {
+  let hit = tangentCache.get(path)
+  if (hit) return hit
+  const ch: Channels = path.map(channelsOf)
+  const n = path.length
+  const m: Channels = ch.map((row, i) =>
+    row.map((_, c) => {
+      // Ends are at rest.
+      if (i === 0 || i === n - 1) return 0
+      return (TENSION * (ch[i + 1][c] - ch[i - 1][c])) / (path[i + 1].p - path[i - 1].p)
+    }),
+  )
+  hit = { ch, m }
+  tangentCache.set(path, hit)
+  return hit
+}
+
+/** Cubic Hermite between two keys; `m` are slopes per unit of p. */
+function hermite(y0: number, y1: number, m0: number, m1: number, h: number, t: number) {
+  const t2 = t * t
+  const t3 = t2 * t
+  return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * m0 + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * h * m1
+}
 
 export function cameraAt(path: CamKey3[], p: number): Omit<CamKey3, 'p'> {
   if (p <= path[0].p) return path[0]
@@ -43,14 +79,15 @@ export function cameraAt(path: CamKey3[], p: number): Omit<CamKey3, 'p'> {
   if (p >= last.p) return last
   let i = 0
   while (i < path.length - 2 && p > path[i + 1].p) i++
-  const a = path[i]
-  const b = path[i + 1]
-  const t = easeInOut((p - a.p) / (b.p - a.p))
+  const { ch, m } = prepare(path)
+  const h = path[i + 1].p - path[i].p
+  const t = (p - path[i].p) / h
+  const v = ch[i].map((_, c) => hermite(ch[i][c], ch[i + 1][c], m[i][c], m[i + 1][c], h, t))
   return {
-    pos: [mix(a.pos[0], b.pos[0], t), mix(a.pos[1], b.pos[1], t), mix(a.pos[2], b.pos[2], t)],
-    look: [mix(a.look[0], b.look[0], t), mix(a.look[1], b.look[1], t), mix(a.look[2], b.look[2], t)],
-    fov: mix(a.fov, b.fov, t),
-    ox: mix(a.ox, b.ox, t),
-    oy: mix(a.oy, b.oy, t),
+    pos: [v[0], v[1], v[2]],
+    look: [v[3], v[4], v[5]],
+    fov: v[6],
+    ox: v[7],
+    oy: v[8],
   }
 }

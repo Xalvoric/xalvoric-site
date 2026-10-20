@@ -4,6 +4,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { beats, callouts, layers, outline, SCROLL_LENGTH_VH, TILT } from '../scene/config'
 import { clamp, driftAt, opacityAt } from '../scene/timeline'
 import { StillsRenderer } from '../scene/stillsRenderer'
+import { Follower } from '../scene/follow'
 import type { AnchorName, FrameState, HeroRenderer } from '../scene/renderer'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { hero } from '../content/site'
@@ -21,6 +22,8 @@ const BEAT_LABELS = ['Studio', 'Services', 'Begin']
 const DRIFT_PX = 28
 /** Callouts need the desktop two-column layout. */
 const CALLOUT_MIN_WIDTH = 860
+/** Hero progress where the scene starts sinking to black ahead of the Services chapter. */
+const FADE_FROM = 0.9
 
 const easeOut = (t: number) => 1 - (1 - t) ** 3
 const ramp = (p: number, a: number, b: number) => clamp((p - a) / (b - a), 0, 1)
@@ -52,6 +55,7 @@ function MotionScene() {
   const barRef = useRef<HTMLSpanElement>(null)
   const counterRef = useRef<HTMLSpanElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const fadeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const section = sectionRef.current!
@@ -60,6 +64,10 @@ function MotionScene() {
     const glCanvas = glRef.current!
     const svg = svgRef.current!
 
+    // `progress` is what is drawn. It follows the real scroll position (`follow.target`)
+    // by ~90 ms on wheel/trackpad so single wheel notches don't step the camera, and
+    // always lands exactly on it. Touch scrolling already has momentum, so no follow there.
+    const follow = new Follower(window.matchMedia('(pointer: coarse)').matches ? 0 : 90, 0, 0.0004, 0.2)
     let progress = 0
     let dirty = true
     let disposed = false
@@ -222,6 +230,8 @@ function MotionScene() {
         el.toggleAttribute('data-live', op > 0.6)
       })
       if (barRef.current) barRef.current.style.transform = `scaleX(${progress.toFixed(4)})`
+      // The last tenth of the hero sinks into the dark, so the next section arrives on black.
+      if (fadeRef.current) fadeRef.current.style.opacity = (0.7 * ramp(progress, FADE_FROM, 1)).toFixed(3)
       if (top !== activeBeat && counterRef.current) {
         activeBeat = top
         counterRef.current.textContent = `0${top + 1} / 0${beats.length}  ${BEAT_LABELS[top]}`
@@ -243,7 +253,16 @@ function MotionScene() {
     let lastFrame = 0
 
     let animating = true
+    let lastTick = performance.now()
     const tick = () => {
+      const tickNow = performance.now()
+      const following = follow.step(tickNow - lastTick)
+      lastTick = tickNow
+      if (progress !== follow.value) {
+        progress = follow.value
+        dirty = true
+      }
+      if (following) dirty = true
       if (fine) {
         // Ease toward the pointer, then snap so the frame settles exactly.
         let nx = tiltX + (aimX - tiltX) * TILT.ease
@@ -340,15 +359,17 @@ function MotionScene() {
       start: 'top top',
       end: 'bottom bottom',
       onUpdate: (self) => {
-        progress = self.progress
+        follow.target = self.progress
         dirty = true
       },
       onRefresh: (self) => {
-        progress = self.progress
+        // Layout changed: sit exactly on the real position, no easing.
+        follow.snap(self.progress)
         dirty = true
       },
     })
-    progress = st.progress
+    follow.snap(st.progress)
+    progress = follow.value
     document.fonts?.ready.then(() => {
       if (disposed) return
       ScrollTrigger.refresh()
@@ -360,7 +381,7 @@ function MotionScene() {
     // the same moment of the sequence instead of the same pixel offset.
     let keep = -1
     const onRefreshInit = () => {
-      keep = progress > 0 && progress < 1 ? progress : -1
+      keep = follow.target > 0 && follow.target < 1 ? follow.target : -1
     }
     const onRefreshed = () => {
       if (keep < 0) return
@@ -422,6 +443,7 @@ function MotionScene() {
         <canvas ref={stillsRef} className="scene-canvas scene-canvas--stills" role="img" aria-label={layers[0].alt} />
         <canvas ref={glRef} className="scene-canvas scene-canvas--gl" aria-hidden="true" />
         <div className="scene-scrim" aria-hidden="true" />
+        <div ref={fadeRef} className="scene-fade" aria-hidden="true" />
         <div className="grain" aria-hidden="true" />
 
         {/* Decorative line work: outline build-in, labels, and service callouts (beat 2). */}

@@ -30,7 +30,7 @@ export type SceneLayer = {
 }
 
 /** Section height in viewport heights. More = slower, calmer sequence. */
-export const SCROLL_LENGTH_VH = 420
+export const SCROLL_LENGTH_VH = 340
 
 export const layers: SceneLayer[] = [
   {

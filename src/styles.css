@@ -40,6 +40,14 @@ html {
   scroll-padding-top: var(--header-h);
 }
 
+/* In-page links (#web, #ai, #contact) travel through the page instead of cutting to it. Native scroll, so
+   every scroll-driven frame is still a function of position. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 html.menu-open {
   overflow: hidden;
 }
@@ -268,9 +276,9 @@ main:focus {
   inset: 0;
   z-index: 1;
   height: var(--header-h);
-  background: rgba(5, 5, 5, 0.84);
-  backdrop-filter: blur(14px) saturate(120%);
-  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  background: rgba(5, 5, 5, 0.97);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
   border-bottom: 1px solid var(--line);
 }
 
@@ -577,6 +585,14 @@ main:focus {
     radial-gradient(120% 90% at 50% 50%, rgba(5, 5, 5, 0) 55%, rgba(5, 5, 5, 0.6) 100%);
 }
 
+.scene-fade {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .grain {
   position: absolute;
   inset: 0;
@@ -604,9 +620,17 @@ main:focus {
 .scene-beat::before {
   content: '';
   position: absolute;
-  inset: 4% -22%;
+  inset: -12% -16%;
   z-index: -1;
-  background: radial-gradient(closest-side, rgba(5, 5, 5, 0.72), rgba(5, 5, 5, 0));
+  /* Solid 0.82 black under the text, feathering out only beyond it, so the
+     bright horizon glow never sits directly behind a line of copy. */
+  background: rgba(5, 5, 5, 0.82);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent),
+    linear-gradient(180deg, transparent, #000 10%, #000 90%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent),
+    linear-gradient(180deg, transparent, #000 10%, #000 90%, transparent);
+  mask-composite: intersect;
   pointer-events: none;
 }
 
@@ -690,11 +714,6 @@ main:focus {
   font-size: clamp(1.15rem, 1rem + 0.5vw, 1.45rem);
   font-weight: 520;
   letter-spacing: -0.02em;
-}
-
-.hero-list-note {
-  color: #c6c6c2;
-  font-size: 0.95rem;
 }
 
 .scene-hud {
@@ -843,12 +862,6 @@ main:focus {
   }
 }
 
-@media (max-height: 640px) and (max-width: 859px) {
-  .hero-list-note {
-    display: none;
-  }
-}
-
 /* Reduced-motion hero: the same frames, stacked in normal flow. */
 .static-beat {
   position: relative;
@@ -910,9 +923,22 @@ main:focus {
   margin-bottom: clamp(48px, 7vw, 96px);
 }
 
-/* Services */
+/* ==========================================================================
+   Services chapter: "Three ways we help a business grow."
+
+   The base rules below are the plain layout: a list of three services with a
+   small line drawing each. It is what you get with no JS, with reduced motion,
+   or with ?motion=off. The pinned, scroll-driven version is added on top, and
+   only when the visitor has not asked for less motion.
+   ========================================================================== */
 .services {
+  position: relative;
   border-top: 1px solid var(--line);
+}
+
+.chapter-stage,
+.chapter-rail {
+  display: none;
 }
 
 .service-list {
@@ -920,16 +946,19 @@ main:focus {
 }
 
 .service {
-  display: grid;
-  grid-template-columns: minmax(56px, 0.35fr) 1.25fr 1fr;
-  gap: 28px clamp(32px, 5vw, 80px);
-  padding-block: clamp(40px, 5.5vw, 72px);
   border-top: 1px solid var(--line);
   scroll-margin-top: calc(var(--header-h) + 16px);
 }
 
 .service:last-child {
   border-bottom: 1px solid var(--line);
+}
+
+.service-card {
+  display: grid;
+  grid-template-columns: minmax(56px, 0.35fr) 1.25fr 1fr;
+  gap: 28px clamp(32px, 5vw, 80px);
+  padding-block: clamp(40px, 5.5vw, 72px);
 }
 
 .service-index {
@@ -953,6 +982,22 @@ main:focus {
   color: var(--muted);
   font-size: clamp(1.05rem, 1rem + 0.25vw, 1.2rem);
   text-wrap: pretty;
+}
+
+.service-figure {
+  margin-top: 32px;
+  max-width: 340px;
+}
+
+.service-figure-svg {
+  width: 100%;
+  height: auto;
+  --build: 1;
+  --sw: 2.4;
+}
+
+.service-figure .fl {
+  display: none;
 }
 
 .service-detail .mini-label {
@@ -987,7 +1032,7 @@ main:focus {
 }
 
 @media (max-width: 959px) {
-  .service {
+  .service-card {
     grid-template-columns: 1fr;
     gap: 20px;
   }
@@ -997,9 +1042,324 @@ main:focus {
   }
 }
 
+/* --- Line drawings. --build (0..1) draws them; --k staggers each stroke. --- */
+.fp {
+  fill: none;
+  stroke: rgba(243, 243, 241, 0.85);
+  stroke-width: var(--sw, 1.6);
+  stroke-linecap: butt;
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - clamp(0, calc(var(--build, 1) * 1.7 - var(--k, 0) * 0.7), 1));
+}
+
+.fp--leader {
+  stroke: rgba(243, 243, 241, 0.5);
+  stroke-width: calc(var(--sw, 1.6) * 0.6);
+  stroke-dashoffset: calc(1 - clamp(0, calc(var(--build, 1) * 3 - 1.4), 1));
+}
+
+.fl text {
+  fill: rgba(243, 243, 241, 0.88);
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  opacity: clamp(0, calc((var(--build, 1) - 0.6) * 4), 1);
+}
+
+/* --- Pinned stage. Everything from here on is the scroll-driven version. --- */
+@media (prefers-reduced-motion: no-preference) {
+  .chapter[data-motion='on'] {
+    --ring-size: min(70svh, 50vw);
+    padding-block: 0;
+  }
+
+  .chapter[data-motion='on'] .chapter-stage {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 0;
+    height: 100vh;
+    height: 100svh;
+    margin-bottom: -100vh;
+    margin-bottom: -100svh;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  /* Cold light, low in the frame, so the ring reads as lit from behind. */
+  .chapter-fog {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(48% 52% at var(--ring-x, 28vw) 54%, rgba(150, 158, 168, 0.11), rgba(150, 158, 168, 0) 72%),
+      linear-gradient(180deg, rgba(5, 5, 5, 0) 62%, rgba(5, 5, 5, 0.5) 100%);
+  }
+
+  .chapter-figure {
+    --shift-x: 44vw;
+    position: absolute;
+    top: 50%;
+    left: var(--ring-x, 28vw);
+    width: var(--ring-size);
+    aspect-ratio: 1;
+    transform: translate3d(calc(-50% + (1 - var(--shift, 1)) * var(--shift-x)), -50%, 0);
+    will-change: transform;
+  }
+
+  .chapter-figure svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    --sw: 1.8;
+  }
+
+  .ring-ticks {
+    fill: none;
+    stroke: rgba(243, 243, 241, 0.3);
+    stroke-width: 7;
+    stroke-dasharray: 1.6 17.2;
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: calc(0.2 + 0.8 * var(--in, 1));
+  }
+
+  .ring-arc {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: calc(2px + 3px * var(--on, 1));
+    stroke-opacity: calc((0.15 + 0.85 * var(--in, 1)) * (0.38 + 0.62 * var(--on, 1)));
+  }
+
+  .ring-tag text {
+    fill: var(--ink);
+    font-family: var(--mono);
+    font-size: 19px;
+    letter-spacing: 0.16em;
+    opacity: calc(var(--in, 1) * (0.4 + 0.6 * var(--on, 1)));
+  }
+
+  .fig {
+    opacity: var(--vis, 0);
+  }
+
+  .fig--web {
+    opacity: var(--vis, 1);
+  }
+
+  /* Flow: the real text scrolls over the pinned stage. */
+  .chapter[data-motion='on'] .chapter-flow {
+    position: relative;
+    z-index: 1;
+  }
+
+  .chapter[data-motion='on'] .chapter-intro {
+    min-height: 100vh;
+    min-height: 100svh;
+    margin-bottom: 0;
+    padding-top: var(--header-h);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .chapter-intro > * {
+    max-width: min(46%, 36rem);
+  }
+
+  .chapter-intro .section-title {
+    max-width: 11ch;
+    font-size: clamp(2.6rem, 1.2rem + 5vw, 6rem);
+    line-height: 0.96;
+  }
+
+  .chapter-intro .eyebrow,
+  .chapter-intro .section-lede {
+    opacity: clamp(0, calc(var(--intro, 1) * 3 - 1), 1);
+  }
+
+  .chapter .w {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: top;
+    padding-bottom: 0.12em;
+    margin-bottom: -0.12em;
+  }
+
+  .chapter .w > span {
+    display: inline-block;
+    transform: translateY(calc((1 - clamp(0, calc(var(--intro, 1) * 5 - var(--i, 0) * 0.6), 1)) * 110%));
+  }
+
+  .chapter[data-motion='on'] .chapter-body {
+    position: relative;
+  }
+
+  /* Index along the bottom of the stage; follows the viewer, takes no space. */
+  .chapter[data-motion='on'] .chapter-rail {
+    position: sticky;
+    top: calc(100vh - 76px);
+    top: calc(100svh - 76px);
+    height: 0;
+    z-index: 3;
+  }
+
+  /* Needs the room beside the ring; below this width the hero links and the cards do the job. */
+  @media (min-width: 1100px) {
+    .chapter[data-motion='on'] .chapter-rail {
+      display: block;
+    }
+  }
+
+  .chapter-rail ul {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
+  }
+
+  .chapter-rail a {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-shadow: 0 0 12px rgba(5, 5, 5, 0.9);
+    transition: color 0.25s var(--ease-out);
+  }
+
+  .chapter-rail a:hover,
+  .chapter-rail a[aria-current] {
+    color: var(--ink);
+  }
+
+  .chapter[data-motion='on'] .service {
+    display: flex;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100svh;
+    margin-left: 54%;
+    padding-block: calc(var(--header-h) + 24px) 48px;
+    border: 0;
+  }
+
+  .chapter[data-motion='on'] .service-card {
+    display: block;
+    max-width: 34rem;
+    padding-block: 0;
+    opacity: calc(0.25 + 0.75 * var(--vis, 1));
+    transform: translate3d(0, calc((1 - var(--vis, 1)) * 28px), 0);
+  }
+
+  .chapter[data-motion='on'] .service-index {
+    display: block;
+    margin-bottom: 18px;
+    padding-top: 0;
+  }
+
+  .chapter[data-motion='on'] .service-figure {
+    display: none;
+  }
+
+  .chapter[data-motion='on'] .service-detail {
+    margin-top: 28px;
+  }
+
+  .chapter[data-motion='on'] .service-detail .mini-label + p,
+  .chapter[data-motion='on'] .tick-list {
+    margin-bottom: 22px;
+  }
+
+  .chapter[data-motion='on'] .tick-list li {
+    padding-block: 8px;
+  }
+
+  /* Phones and narrow tablets: ring across the top, text sheets slide up over it. */
+  @media (max-width: 859px) {
+    .chapter[data-motion='on'] {
+      --ring-size: min(78vw, 36svh);
+    }
+
+    .chapter-figure {
+      --shift-x: 0px;
+      --ring-x: 50vw;
+      top: calc(var(--header-h) + 8px + var(--ring-size) / 2);
+    }
+
+    .chapter-fog {
+      --ring-x: 50vw;
+    }
+
+    .chapter-figure svg {
+      --sw: 3;
+    }
+
+    .fl,
+    .ring-tag {
+      display: none;
+    }
+
+    .chapter[data-motion='on'] .chapter-intro {
+      justify-content: flex-end;
+      padding-bottom: 12svh;
+    }
+
+    .chapter-intro > * {
+      max-width: none;
+    }
+
+    .chapter-intro .section-title {
+      max-width: 12ch;
+      font-size: clamp(2.3rem, 1.4rem + 4.4vw, 3.4rem);
+    }
+
+    .chapter[data-motion='on'] .service {
+      min-height: 0;
+      margin-left: 0;
+      align-items: flex-start;
+      /* The text sheet starts just under the ring and slides up over it as you read. */
+      padding-block: calc(var(--header-h) + 24px + var(--ring-size)) 8svh;
+    }
+
+    .chapter[data-motion='on'] .service-name {
+      font-size: clamp(1.8rem, 1.2rem + 3vw, 2.4rem);
+    }
+
+    .chapter[data-motion='on'] .service-lede {
+      margin-top: 12px;
+      font-size: 1rem;
+    }
+
+    .chapter[data-motion='on'] .service-detail {
+      margin-top: 20px;
+    }
+
+    .chapter[data-motion='on'] .tick-list li {
+      padding-block: 6px;
+      font-size: 0.92rem;
+    }
+
+    .chapter[data-motion='on'] .service-card {
+      max-width: none;
+      padding: 22px 20px 12px;
+      background: rgba(5, 5, 5, 0.9);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+  }
+}
+
 /* Process: inverted panel for rhythm */
 .process {
-  background: var(--paper);
+  /* The black Services chapter dissolves into the paper band instead of cutting to it. */
+  background: linear-gradient(180deg, var(--bg) 0, var(--paper) calc(var(--section-y) * 0.8)) var(--paper);
   color: var(--paper-ink);
 }
 
@@ -1331,7 +1691,7 @@ main:focus {
 .footer-nav a {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 44px;
   color: var(--muted);
 }
 

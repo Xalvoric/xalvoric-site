@@ -1,47 +1,4 @@
-import { faq, process, services } from '../content/site'
-
-export function Services() {
-  return (
-    <section id="services" className="section services" aria-labelledby="services-title">
-      <div className="container">
-        <header className="section-head">
-          <p className="eyebrow">Services</p>
-          <h2 id="services-title" className="section-title">
-            Three ways we help a business grow.
-          </h2>
-          <p className="section-lede">
-            Take one service or combine them. Each is led by the same team, so your site, your tools and your ads
-            speak with one voice.
-          </p>
-        </header>
-
-        <ol className="service-list">
-          {services.map((s) => (
-            <li key={s.id} id={s.id} className="service">
-              <span className="service-index" aria-hidden="true">
-                {s.index}
-              </span>
-              <div className="service-main">
-                <h3 className="service-name">{s.name}</h3>
-                <p className="service-lede">{s.lede}</p>
-              </div>
-              <div className="service-detail">
-                <h4 className="mini-label">What’s included</h4>
-                <ul className="tick-list">
-                  {s.includes.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <h4 className="mini-label">A good fit if</h4>
-                <p className="service-fit">{s.fit}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
-  )
-}
+import { faq, process } from '../content/site'
 
 export function Process() {
   return (
